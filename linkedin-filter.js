@@ -1,56 +1,113 @@
 let isFilterEnabled = false;
 
-// Function to check if text contains AI-related keywords
-// Pre-compile the regex pattern once
+// Refined AI filters with extensive pattern list
+const refinedAiFilters = [
+    /\bartificial intelligence\b/i,
+    /\bmachine learning\b/i,
+    /\bdeep learning\b/i,
+    /\bneural networks?\b/i,
+    /\bnatural language processing\b/i,
+    /\bcomputer vision\b/i,
+    /\breinforcement learning\b/i,
+    /\bgenerative AI\b/i,
+    /\bpredictive analytics\b/i,
+    /\bdata science\b/i,
+    /\bautonomous agents?\b/i,
+    /\btransformer models?\b/i,
+    /\bdiffusion models?\b/i,
+    /\bvector database\b/i,
+    /\bRAG\b/i,
+    /\bGPT-?[345](\.5)?\b/i,
+    /\bChatGPT\b/i,
+    /\bOpenAI\b/i,
+    /\bAnthropic\b/i,
+    /\bDeepMind\b/i,
+    /\bClaude\b/i,
+    /\bBard\b/i,
+    /\bGemini\b/i,
+    /\bSora\b/i,
+    /\bMidjourney\b/i,
+    /\bDALL[\\-\\s]?E\b/i,
+    /\bStable Diffusion\b/i,
+    /\bLlama[\s-]?2\b/i,
+    /\bPaLM\b/i,
+    /\bCopilot\b/i,
+    /\bAuto-?GPT\b/i,
+    /\bBabyAGI\b/i,
+    /\bAgentGPT\b/i,
+    /\bLangChain\b/i,
+    /\bHugging\s?Face\b/i,
+    /\bTensorFlow\b/i,
+    /\bPyTorch\b/i,
+    /\bKeras\b/i,
+    /\bscikit-learn\b/i,
+    /\bAzure AI\b/i,
+    /\bAWS AI\b/i,
+    /\bIBM Watson\b/i,
+    /\bchatbot(s)?\b/i,
+    /\bvoice assistant(s)?\b/i,
+    /\bimage recognition\b/i,
+    /\brecommendation engine(s)?\b/i,
+    /\bsemantic search\b/i,
+    /\bknowledge graph(s)?\b/i,
+    /\bprompt engineering\b/i,
+    /\bAI ethics\b/i,
+    /\bAI safety\b/i,
+    /\bAI bias\b/i,
+    /\bSingularity\b/i,
+    /\bAGI\b/i,
+    /\bfoundation models\b/i,
+    /\bAI (?:in|for) (business|marketing|development|innovation|research|healthcare|finance|education|etc)\b/i,
+    /\bAI[-\s]?(powered|driven|enabled|based|revolution|systems?)\b/i,
+    /\b(powered|driven|enabled|based|revolution|systems?)[\s-]?AI\b/i,
+    /\bAI\s+(app|tool|model|system|solution)\b/i,
+    /\bAI\s+revolution\b/i,
+    /\b(revolutionizing|revolutionized by)\s+AI\b/i,
+    /\bdisruptive AI\b/i,
+    /\bAI\s+game[-\s]?changer\b/i,
+    /\btransformative AI\b/i,
+    /\bharnessing AI\b/i,
+    /\bthe future of AI\b/i,
+    /\bAI is taking over\b/i,
+    /\b(age of|era of) AI\b/i,
+    /\bsuperintelligence\b/i,
+    /\b(just built|just launched|created|built with|launched my) an? AI (app|tool|model|system|solution)\b/i,
+    /\bexcited to (share|announce) my new AI (app|tool|model|system|solution)\b/i,
+    /\bmy take on (the|how|why|what|impact|benefits|challenges) .*AI\b/i,
+    /\bthe power of AI (to|in|for) (business|marketing|development|innovation|research|healthcare|finance|education|etc)\b/i,
+    // Specific pattern for Meta AI with company context
+    /\b(?:Facebook's|FB's|Zuckerberg's)?\s*Meta\s+AI\b/i,
+    /\bMeta's\s+AI\b/i,
+    /\bMeta\s+(?:Llama|AI\s+research|AI\s+lab|AI\s+team)\b/i
+];
 
+// Special cases that require additional context verification
+const ambiguousTerms = {
+    'meta': /\b(?:facebook|zuckerberg|llama|company|platform)\b/i,
+    'rag': /\b(?:retrieval|augmented|generation|vector|embedding)\b/i,
+    'agi': /\b(?:artificial|general|intelligence|superintelligence)\b/i,
+    'sora': /\b(?:openai|video|generator|text-to-video|ai\s+model)\b/i,
+    'bard': /\b(?:google|ai|assistant|chatbot|language|model)\b/i
+};
 
-// Update the AI pattern to be more specific and reduce false positives
-
-// Improve the containsAIKeywords function with better context analysis
-function containsAIKeywords(text) {
-    if (!text) return { matched: false };
-    
-    // Skip common false positive phrases
-    const skipPhrases = [
-        'air',
-        'aim',
-        'aid',
-        'aisle',
-        'airing',
-        'aint',
-        'paid'
-    ];
-
-    // Check if text contains skip phrases
-    const lowerText = text.toLowerCase();
-    if (skipPhrases.some(phrase => lowerText.includes(phrase))) {
-        return { matched: false };
-    }
-
-    const match = AI_PATTERN.exec(text);
-    if (!match) return { matched: false };
-
-    // Additional context check
-    const words = text.split(/\s+/);
-    const matchIndex = words.findIndex(word => AI_PATTERN.test(word));
-    if (matchIndex === -1) return { matched: false };
-
-    // Check surrounding context
-    const contextWords = words.slice(Math.max(0, matchIndex - 3), matchIndex + 4);
-    const contextText = contextWords.join(' ');
-
-    // Return false if it's likely a false positive
-    if (contextText.length < 10 && !contextText.toLowerCase().includes('ai')) {
-        return { matched: false };
-    }
-
-    return { matched: true, pattern: match[0] };
-}
+// Skip phrases that are common false positives
+const skipPhrases = [
+    'air',
+    'aim',
+    'aid',
+    'aisle',
+    'airing',
+    'aint',
+    'paid',
+    'metadata',
+    'meta-analysis',
+    'meta description',
+    'meta tag',
+    'meta-learning',
+    'metaverse'
+];
 
 // Pre-compile all regex and selectors for better performance
-// Pre-compile all patterns and cache DOM queries
-// Add this near the top of the file with other constants
-// Pre-compile patterns and cache selectors at the top
 const POST_SELECTOR = '.feed-shared-update-v2:not([data-ai-scanned])';
 const FEED_SELECTOR = '.core-rail, .feed-following-feed';
 const VIEWPORT_THRESHOLD = 1000; // Increased for better pre-loading
@@ -59,7 +116,36 @@ const VIEWPORT_THRESHOLD = 1000; // Increased for better pre-loading
 const processedPosts = new WeakSet();
 const overlayCache = new WeakMap();
 
-// Optimize IntersectionObserver
+// Improved AI keyword detection with context analysis
+function containsAIKeywords(text) {
+    if (!text) return { matched: false };
+    
+    // Skip common false positive phrases
+    const lowerText = text.toLowerCase();
+    if (skipPhrases.some(phrase => lowerText.includes(phrase) && !lowerText.includes('ai'))) {
+        return { matched: false };
+    }
+
+    // Loop through all patterns
+    for (const pattern of refinedAiFilters) {
+        const match = pattern.exec(text);
+        if (match) {
+            // For ambiguous terms, check additional context
+            const matchedTerm = match[0].toLowerCase();
+            for (const [term, contextPattern] of Object.entries(ambiguousTerms)) {
+                if (matchedTerm.includes(term) && !contextPattern.test(text)) {
+                    // If term is ambiguous and required context not found, skip
+                    return { matched: false };
+                }
+            }
+            return { matched: true, pattern: match[0] };
+        }
+    }
+
+    return { matched: false };
+}
+
+// Optimized IntersectionObserver
 const postObserver = new IntersectionObserver((entries) => {
     if (!isFilterEnabled) return;
     
@@ -73,10 +159,7 @@ const postObserver = new IntersectionObserver((entries) => {
     threshold: 0
 });
 
-// Optimized scan function
-// Update the AI pattern to include more relevant terms
-const AI_PATTERN = /(AI|A\.I\.|artificial intelligence|machine learning|deep learning|neural network|GPT-[34]|ChatGPT|LLM|SLM|Presidio|Azure AI|AI Bootcamp|Human-AI|HAI)s?\b/i;
-
+// Enhanced post scanning function
 function scanPost(post) {
     if (processedPosts.has(post)) return;
     processedPosts.add(post);
@@ -90,13 +173,11 @@ function scanPost(post) {
     ].filter(Boolean).join(' ');
 
     // Check for AI keywords with improved context
-    if (textContent && (
-        AI_PATTERN.test(textContent) ||
-        textContent.toLowerCase().includes('artificial intelligence') ||
-        (textContent.toLowerCase().includes('ai') && 
-         textContent.toLowerCase().includes('machine learning'))
-    )) {
-        handleMatchedPost(post);
+    if (textContent) {
+        const result = containsAIKeywords(textContent);
+        if (result.matched) {
+            handleMatchedPost(post);
+        }
     }
 }
 
@@ -186,6 +267,9 @@ function handleMatchedPost(post) {
         // Add overlay to the entire post
         post.style.position = 'relative';
         post.appendChild(overlayContainer);
+        
+        // Store in cache
+        overlayCache.set(post, overlayContainer);
     }
     
     overlayContainer.style.display = 'flex';
@@ -199,7 +283,6 @@ const scrollHandler = () => {
     scrollTimeout = setTimeout(() => {
         const unscannedPosts = document.querySelectorAll(POST_SELECTOR);
         if (unscannedPosts.length) {
-            const fragment = document.createDocumentFragment();
             unscannedPosts.forEach(post => {
                 const rect = post.getBoundingClientRect();
                 if (rect.top < window.innerHeight + VIEWPORT_THRESHOLD) {
@@ -223,7 +306,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         } else {
             // Show all posts
             document.querySelectorAll('.feed-shared-update-v2').forEach(post => {
-                post.style.display = '';
+                const overlay = post.querySelector('.ai-content-overlay');
+                if (overlay) {
+                    overlay.style.display = 'none';
+                }
             });
         }
     }
@@ -328,8 +414,7 @@ function createHeaderToggle() {
             `;
             document.head.appendChild(style);
 
-            // Update the click handling with improved state management
-            // Update the toggle handler in createHeaderToggle function
+            // Update the toggle handler with improved state management
             input.addEventListener('change', function() {
                 isFilterEnabled = this.checked;
                 
@@ -372,7 +457,7 @@ function createHeaderToggle() {
                     hideAIPosts();
                 } else {
                     document.querySelectorAll('.ai-content-overlay').forEach(overlay => {
-                        overlay.remove();
+                        overlay.style.display = 'none';
                     });
                 }
             }
@@ -385,17 +470,27 @@ function createHeaderToggle() {
     }, 1000);
 }
 
-// Update initialization to prevent multiple instances
-// Add this function before initialize()
+// Setup post observer
 function setupPostObserver() {
     const observer = new MutationObserver((mutations) => {
         if (!isFilterEnabled) return;
         
         for (const mutation of mutations) {
             mutation.addedNodes.forEach(node => {
-                if (node.matches?.(POST_SELECTOR)) {
-                    postObserver.observe(node);
-                    scanPost(node);
+                if (node.nodeType === 1) { // Element node
+                    if (node.matches?.(POST_SELECTOR)) {
+                        postObserver.observe(node);
+                        scanPost(node);
+                    } else {
+                        // Check for posts inside the added node
+                        const posts = node.querySelectorAll?.(POST_SELECTOR);
+                        if (posts && posts.length) {
+                            posts.forEach(post => {
+                                postObserver.observe(post);
+                                scanPost(post);
+                            });
+                        }
+                    }
                 }
             });
         }
