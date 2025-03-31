@@ -1,31 +1,33 @@
 let isFilterEnabled = false;
 
 // Function to check if text contains AI-related keywords
+// Pre-compile the regex pattern once
+const AI_PATTERN = /(AI|A\.I\.|artificial intelligence|machine learning|deep learning|neural network|GPT-[34]|ChatGPT|LLM)s?\b/i;
+
 function containsAIKeywords(text) {
     if (!text) return { matched: false };
-    // Pre-compiled regex for maximum performance
-    const pattern = /(AI|A\.I\.|artificial intelligence|machine learning|deep learning|neural network|GPT-[34]|ChatGPT|LLM)s?\b/i;
-    const match = pattern.exec(text);
+    const match = AI_PATTERN.exec(text);
     return match ? { matched: true, pattern: match[0] } : { matched: false };
 }
 
 function hideAIPosts() {
+    // Use more efficient selector and process in larger chunks
     const posts = document.querySelectorAll('.feed-shared-update-v2:not([data-ai-scanned])');
     if (!posts.length) return;
 
     const processChunk = (startIndex) => {
-        const chunk = Array.from(posts).slice(startIndex, startIndex + 10);
+        const chunk = Array.from(posts).slice(startIndex, startIndex + 20); // Increased chunk size
         if (!chunk.length) return;
 
-        chunk.forEach(post => {
+        for (const post of chunk) {
             post.setAttribute('data-ai-scanned', 'true');
-            const text = post.querySelector('.feed-shared-update-v2__description')?.textContent || '';
+            const text = post.textContent; // Get all text content at once
             const result = containsAIKeywords(text);
             if (result.matched) handleMatchedPost(post, result);
-        });
+        }
 
-        if (startIndex + 10 < posts.length) {
-            requestIdleCallback(() => processChunk(startIndex + 10), { timeout: 100 });
+        if (startIndex + 20 < posts.length) {
+            requestAnimationFrame(() => processChunk(startIndex + 20)); // Use RAF instead of requestIdleCallback
         }
     };
 
@@ -36,28 +38,19 @@ function setupPostObserver() {
     const feedObserver = new MutationObserver((mutations) => {
         if (!isFilterEnabled) return;
         
-        let shouldProcess = false;
-        for (const mutation of mutations) {
-            if (mutation.addedNodes.length) {
-                shouldProcess = true;
-                break;
-            }
-        }
-        
-        if (shouldProcess) {
-            cancelIdleCallback(window._aiFilterTimeout);
-            window._aiFilterTimeout = requestIdleCallback(hideAIPosts, { timeout: 150 });
+        // Quick check for relevant mutations
+        if (mutations.some(m => m.addedNodes.length > 0)) {
+            if (window._aiFilterTimeout) cancelAnimationFrame(window._aiFilterTimeout);
+            window._aiFilterTimeout = requestAnimationFrame(hideAIPosts);
         }
     });
 
-    // Observe the main feed with optimized options
     const observeTarget = document.querySelector('.core-rail') || document.querySelector('.feed-following-feed');
     if (observeTarget) {
         feedObserver.observe(observeTarget, {
             childList: true,
             subtree: true,
-            attributes: true,
-            attributeFilter: ['class']
+            attributes: false // Removed unnecessary attribute observation
         });
     }
 }
