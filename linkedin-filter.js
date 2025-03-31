@@ -12,65 +12,82 @@ function containsAIKeywords(text) {
 
 // Pre-compile all regex and selectors for better performance
 // Pre-compile all patterns and cache DOM queries
+// Add this near the top of the file with other constants
 const AI_PATTERN = /(AI|A\.I\.|artificial intelligence|machine learning|deep learning|neural network|GPT-[34]|ChatGPT|LLM)s?\b/i;
 const POST_SELECTOR = '.feed-shared-update-v2:not([data-ai-scanned])';
 const FEED_SELECTOR = '.core-rail, .feed-following-feed';
+const VIEWPORT_THRESHOLD = 500;
 
-// Cache for processed posts to avoid reprocessing
+// Initialize WeakSet for processed posts
 const processedPosts = new WeakSet();
 
-function hideAIPosts() {
-    // Use performance-optimized selector
-    const posts = document.querySelectorAll(POST_SELECTOR);
-    if (!posts.length) return;
-
-    // Process in micro-batches for better performance
-    let index = 0;
-    const batchSize = 5;
-
-    function processBatch() {
-        const end = Math.min(index + batchSize, posts.length);
-        const fragment = document.createDocumentFragment();
-
-        while (index < end) {
-            const post = posts[index++];
-            if (processedPosts.has(post)) continue;
-
-            processedPosts.add(post);
-            post.setAttribute('data-ai-scanned', 'true');
-
-            // Quick text scan - only check visible content
-            const textContent = post.querySelector('.feed-shared-update-v2__description')?.textContent || '';
-            if (AI_PATTERN.test(textContent)) {
-                handleMatchedPost(post);
-            }
+// Use Intersection Observer for better performance
+// Update the IntersectionObserver options for more responsive detection
+const postObserver = new IntersectionObserver((entries) => {
+    if (!isFilterEnabled) return;
+    
+    entries.forEach(entry => {
+        if (entry.isIntersecting && !entry.target.hasAttribute('data-ai-scanned')) {
+            // Use immediate execution instead of requestAnimationFrame
+            scanPost(entry.target);
         }
+    });
+}, {
+    rootMargin: `${VIEWPORT_THRESHOLD}px 0px`,
+    threshold: [0, 0.1, 0.5], // Multiple thresholds for better detection
+});
 
-        if (index < posts.length) {
-            // Process next batch in next animation frame
-            requestAnimationFrame(processBatch);
-        }
+function scanPost(post) {
+    if (processedPosts.has(post)) return;
+    
+    processedPosts.add(post);
+    post.setAttribute('data-ai-scanned', 'true');
+    
+    // Immediate text scan without animation frame delay
+    const textContent = post.querySelector('.feed-shared-update-v2__description')?.textContent || '';
+    if (AI_PATTERN.test(textContent)) {
+        handleMatchedPost(post);
     }
+}
 
-    // Start processing immediately
-    processBatch();
+// Add passive scroll listener for continuous detection
+document.addEventListener('scroll', () => {
+    if (isFilterEnabled) {
+        const unscannedPosts = document.querySelectorAll(POST_SELECTOR);
+        unscannedPosts.forEach(post => {
+            const rect = post.getBoundingClientRect();
+            if (rect.top < window.innerHeight + VIEWPORT_THRESHOLD) {
+                scanPost(post);
+            }
+        });
+    }
+}, { passive: true });
+
+// Remove the old scroll listener with debounce
+// window.addEventListener('scroll', debounce(() => {...}), 500));
+
+function hideAIPosts() {
+    // Observe new posts immediately
+    document.querySelectorAll(POST_SELECTOR).forEach(post => {
+        postObserver.observe(post);
+        scanPost(post);
+    });
 }
 
 function setupPostObserver() {
-    // Use single observer for better performance
     const observer = new MutationObserver((mutations) => {
         if (!isFilterEnabled) return;
         
-        // Quick check for new content
         for (const mutation of mutations) {
-            if (mutation.addedNodes.length) {
-                requestAnimationFrame(hideAIPosts);
-                break;
-            }
+            mutation.addedNodes.forEach(node => {
+                if (node.matches?.(POST_SELECTOR)) {
+                    postObserver.observe(node);
+                    scanPost(node);
+                }
+            });
         }
     });
 
-    // Observe both possible feed containers
     document.querySelectorAll(FEED_SELECTOR).forEach(feed => {
         if (feed) {
             observer.observe(feed, {
@@ -81,6 +98,7 @@ function setupPostObserver() {
     });
 }
 
+// Remove scroll listener as we're using IntersectionObserver
 // Initialize immediately without waiting
 function initialize() {
     if (document.readyState !== 'loading') {
@@ -108,11 +126,13 @@ function handleMatchedPost(post, result) {
     // Create or get the overlay container
     let overlayContainer = post.querySelector('.ai-content-overlay');
     if (!overlayContainer) {
+        // Add dark mode detection here
+        const isDarkMode = document.documentElement.classList.contains('theme--dark') || 
+                          document.body.classList.contains('theme--dark') ||
+                          window.matchMedia('(prefers-color-scheme: dark)').matches;
+
         overlayContainer = document.createElement('div');
         overlayContainer.className = 'ai-content-overlay';
-        
-        // Add dark mode detection and dynamic styling
-        const isDarkMode = document.documentElement.classList.contains('theme--dark');
         overlayContainer.style.cssText = `
             background-color: ${isDarkMode ? 'rgba(0, 0, 0, 0.75)' : 'rgba(240, 240, 240, 0.75)'};
             padding: 20px;
