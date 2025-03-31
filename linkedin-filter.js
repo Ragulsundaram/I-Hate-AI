@@ -94,23 +94,22 @@ function handleMatchedPost(post, result) {
             align-items: center;
             justify-content: center;
             gap: 12px;
-            z-index: 1000;
+            z-index: 51; /* Changed from 1000 to be below LinkedIn's nav (which is 100) */
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
             min-height: 200px;
             height: 100%;
         `;
 
-        // Add eye-slash icon with higher z-index
+        // Update z-index for interactive elements to be relative to new overlay z-index
         const icon = document.createElement('span');
         icon.innerHTML = '&#128683;';
         icon.style.cssText = `
             font-size: 24px;
             position: relative;
-            z-index: 1001;
+            z-index: 52;
         `;
 
-        // Add message with higher z-index
         const message = document.createElement('div');
         message.textContent = 'AI Content Detected';
         message.style.cssText = `
@@ -118,10 +117,9 @@ function handleMatchedPost(post, result) {
             font-size: 16px;
             font-weight: bold;
             position: relative;
-            z-index: 1001;
+            z-index: 52;
         `;
 
-        // Add show content button with higher z-index
         const showButton = document.createElement('button');
         showButton.textContent = 'Show Post';
         showButton.style.cssText = `
@@ -134,7 +132,7 @@ function handleMatchedPost(post, result) {
             font-size: 14px;
             transition: all 0.2s ease;
             position: relative;
-            z-index: 1001;
+            z-index: 52;
         `;
 
         showButton.addEventListener('mouseover', () => {
