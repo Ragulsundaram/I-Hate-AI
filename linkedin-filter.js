@@ -110,8 +110,11 @@ function handleMatchedPost(post, result) {
     if (!overlayContainer) {
         overlayContainer = document.createElement('div');
         overlayContainer.className = 'ai-content-overlay';
+        
+        // Add dark mode detection and dynamic styling
+        const isDarkMode = document.documentElement.classList.contains('theme--dark');
         overlayContainer.style.cssText = `
-            background-color: rgba(240, 240, 240, 0.75);
+            background-color: ${isDarkMode ? 'rgba(0, 0, 0, 0.75)' : 'rgba(240, 240, 240, 0.75)'};
             padding: 20px;
             text-align: center;
             border-radius: 8px;
@@ -125,26 +128,26 @@ function handleMatchedPost(post, result) {
             align-items: center;
             justify-content: center;
             gap: 12px;
-            z-index: 51; /* Changed from 1000 to be below LinkedIn's nav (which is 100) */
+            z-index: 51;
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
             min-height: 200px;
             height: 100%;
         `;
 
-        // Update z-index for interactive elements to be relative to new overlay z-index
         const icon = document.createElement('span');
         icon.innerHTML = '&#128683;';
         icon.style.cssText = `
             font-size: 24px;
             position: relative;
             z-index: 52;
+            color: ${isDarkMode ? '#E7E9EA' : '#666'};
         `;
 
         const message = document.createElement('div');
         message.textContent = 'AI Content Detected';
         message.style.cssText = `
-            color: #666;
+            color: ${isDarkMode ? '#E7E9EA' : '#666'};
             font-size: 16px;
             font-weight: bold;
             position: relative;
@@ -155,8 +158,8 @@ function handleMatchedPost(post, result) {
         showButton.textContent = 'Show Post';
         showButton.style.cssText = `
             background-color: transparent;
-            border: 1px solid #0a66c2;
-            color: #0a66c2;
+            border: 1px solid ${isDarkMode ? '#A8B4C2' : '#0a66c2'};
+            color: ${isDarkMode ? '#A8B4C2' : '#0a66c2'};
             padding: 8px 16px;
             border-radius: 16px;
             cursor: pointer;
@@ -167,7 +170,8 @@ function handleMatchedPost(post, result) {
         `;
 
         showButton.addEventListener('mouseover', () => {
-            showButton.style.backgroundColor = 'rgba(10, 102, 194, 0.1)';
+            showButton.style.backgroundColor = isDarkMode ? 
+                'rgba(168, 180, 194, 0.1)' : 'rgba(10, 102, 194, 0.1)';
         });
 
         showButton.addEventListener('mouseout', () => {
