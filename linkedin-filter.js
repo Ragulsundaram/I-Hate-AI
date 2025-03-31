@@ -4,133 +4,110 @@ let isFilterEnabled = false;
 // Pre-compile the regex pattern once
 
 
+// Update the AI pattern to be more specific and reduce false positives
+
+// Improve the containsAIKeywords function with better context analysis
 function containsAIKeywords(text) {
     if (!text) return { matched: false };
+    
+    // Skip common false positive phrases
+    const skipPhrases = [
+        'air',
+        'aim',
+        'aid',
+        'aisle',
+        'airing',
+        'aint',
+        'paid'
+    ];
+
+    // Check if text contains skip phrases
+    const lowerText = text.toLowerCase();
+    if (skipPhrases.some(phrase => lowerText.includes(phrase))) {
+        return { matched: false };
+    }
+
     const match = AI_PATTERN.exec(text);
-    return match ? { matched: true, pattern: match[0] } : { matched: false };
+    if (!match) return { matched: false };
+
+    // Additional context check
+    const words = text.split(/\s+/);
+    const matchIndex = words.findIndex(word => AI_PATTERN.test(word));
+    if (matchIndex === -1) return { matched: false };
+
+    // Check surrounding context
+    const contextWords = words.slice(Math.max(0, matchIndex - 3), matchIndex + 4);
+    const contextText = contextWords.join(' ');
+
+    // Return false if it's likely a false positive
+    if (contextText.length < 10 && !contextText.toLowerCase().includes('ai')) {
+        return { matched: false };
+    }
+
+    return { matched: true, pattern: match[0] };
 }
 
 // Pre-compile all regex and selectors for better performance
 // Pre-compile all patterns and cache DOM queries
 // Add this near the top of the file with other constants
-const AI_PATTERN = /(AI|A\.I\.|artificial intelligence|machine learning|deep learning|neural network|GPT-[34]|ChatGPT|LLM)s?\b/i;
+// Pre-compile patterns and cache selectors at the top
 const POST_SELECTOR = '.feed-shared-update-v2:not([data-ai-scanned])';
 const FEED_SELECTOR = '.core-rail, .feed-following-feed';
-const VIEWPORT_THRESHOLD = 500;
+const VIEWPORT_THRESHOLD = 1000; // Increased for better pre-loading
 
-// Initialize WeakSet for processed posts
+// Use WeakMap for better performance with DOM elements
 const processedPosts = new WeakSet();
+const overlayCache = new WeakMap();
 
-// Use Intersection Observer for better performance
-// Update the IntersectionObserver options for more responsive detection
+// Optimize IntersectionObserver
 const postObserver = new IntersectionObserver((entries) => {
     if (!isFilterEnabled) return;
     
-    entries.forEach(entry => {
+    for (const entry of entries) {
         if (entry.isIntersecting && !entry.target.hasAttribute('data-ai-scanned')) {
-            // Use immediate execution instead of requestAnimationFrame
-            scanPost(entry.target);
+            queueMicrotask(() => scanPost(entry.target));
         }
-    });
+    }
 }, {
     rootMargin: `${VIEWPORT_THRESHOLD}px 0px`,
-    threshold: [0, 0.1, 0.5], // Multiple thresholds for better detection
+    threshold: 0
 });
+
+// Optimized scan function
+// Update the AI pattern to include more relevant terms
+const AI_PATTERN = /(AI|A\.I\.|artificial intelligence|machine learning|deep learning|neural network|GPT-[34]|ChatGPT|LLM|SLM|Presidio|Azure AI|AI Bootcamp|Human-AI|HAI)s?\b/i;
 
 function scanPost(post) {
     if (processedPosts.has(post)) return;
-    
     processedPosts.add(post);
     post.setAttribute('data-ai-scanned', 'true');
     
-    // Immediate text scan without animation frame delay
-    const textContent = post.querySelector('.feed-shared-update-v2__description')?.textContent || '';
-    if (AI_PATTERN.test(textContent)) {
+    // Scan both post description and article content
+    const textContent = [
+        post.querySelector('.feed-shared-update-v2__description')?.textContent,
+        post.querySelector('.article-content')?.textContent,
+        post.querySelector('.feed-shared-text')?.textContent
+    ].filter(Boolean).join(' ');
+
+    // Check for AI keywords with improved context
+    if (textContent && (
+        AI_PATTERN.test(textContent) ||
+        textContent.toLowerCase().includes('artificial intelligence') ||
+        (textContent.toLowerCase().includes('ai') && 
+         textContent.toLowerCase().includes('machine learning'))
+    )) {
         handleMatchedPost(post);
     }
 }
 
-// Add passive scroll listener for continuous detection
-document.addEventListener('scroll', () => {
-    if (isFilterEnabled) {
-        const unscannedPosts = document.querySelectorAll(POST_SELECTOR);
-        unscannedPosts.forEach(post => {
-            const rect = post.getBoundingClientRect();
-            if (rect.top < window.innerHeight + VIEWPORT_THRESHOLD) {
-                scanPost(post);
-            }
-        });
-    }
-}, { passive: true });
-
-// Remove the old scroll listener with debounce
-// window.addEventListener('scroll', debounce(() => {...}), 500));
-
-function hideAIPosts() {
-    // Observe new posts immediately
-    document.querySelectorAll(POST_SELECTOR).forEach(post => {
-        postObserver.observe(post);
-        scanPost(post);
-    });
-}
-
-function setupPostObserver() {
-    const observer = new MutationObserver((mutations) => {
-        if (!isFilterEnabled) return;
-        
-        for (const mutation of mutations) {
-            mutation.addedNodes.forEach(node => {
-                if (node.matches?.(POST_SELECTOR)) {
-                    postObserver.observe(node);
-                    scanPost(node);
-                }
-            });
-        }
-    });
-
-    document.querySelectorAll(FEED_SELECTOR).forEach(feed => {
-        if (feed) {
-            observer.observe(feed, {
-                childList: true,
-                subtree: true
-            });
-        }
-    });
-}
-
-// Remove scroll listener as we're using IntersectionObserver
-// Initialize immediately without waiting
-function initialize() {
-    if (document.readyState !== 'loading') {
-        setupPostObserver();
-        createHeaderToggle();
-        if (isFilterEnabled) hideAIPosts();
-    } else {
-        document.addEventListener('DOMContentLoaded', () => {
-            setupPostObserver();
-            createHeaderToggle();
-            if (isFilterEnabled) hideAIPosts();
-        });
-    }
-}
-
-// Remove scroll listener and debounce
-initialize();
-
-// Separate function to handle matched posts
-function handleMatchedPost(post, result) {
-    // Get all content elements including the caption
-    const contentElements = post.querySelectorAll('.update-components-text.relative.update-components-update-v2__commentary, .feed-shared-update-v2__description, .feed-shared-inline-show-more-text, .feed-shared-update-v2__content, .feed-shared-update-v2__media');
-    if (!contentElements.length) return;
-
-    // Create or get the overlay container
-    let overlayContainer = post.querySelector('.ai-content-overlay');
+// Optimized post handling
+function handleMatchedPost(post) {
+    let overlayContainer = overlayCache.get(post);
+    
     if (!overlayContainer) {
-        // Add dark mode detection here
         const isDarkMode = document.documentElement.classList.contains('theme--dark') || 
-                          document.body.classList.contains('theme--dark') ||
-                          window.matchMedia('(prefers-color-scheme: dark)').matches;
-
+                          document.body.classList.contains('theme--dark');
+        
         overlayContainer = document.createElement('div');
         overlayContainer.className = 'ai-content-overlay';
         overlayContainer.style.cssText = `
@@ -210,14 +187,32 @@ function handleMatchedPost(post, result) {
         post.style.position = 'relative';
         post.appendChild(overlayContainer);
     }
-
-    // Show the overlay
+    
     overlayContainer.style.display = 'flex';
 }
 
-// Remove duplicate code block after handleMatchedPost
+// Optimized scroll handler with throttle
+let scrollTimeout;
+const scrollHandler = () => {
+    if (scrollTimeout || !isFilterEnabled) return;
+    
+    scrollTimeout = setTimeout(() => {
+        const unscannedPosts = document.querySelectorAll(POST_SELECTOR);
+        if (unscannedPosts.length) {
+            const fragment = document.createDocumentFragment();
+            unscannedPosts.forEach(post => {
+                const rect = post.getBoundingClientRect();
+                if (rect.top < window.innerHeight + VIEWPORT_THRESHOLD) {
+                    scanPost(post);
+                }
+            });
+        }
+        scrollTimeout = null;
+    }, 100);
+};
 
-
+// Use passive scroll listener
+document.addEventListener('scroll', scrollHandler, { passive: true });
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -235,7 +230,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 function createHeaderToggle() {
-    // First check if toggle already exists to prevent duplicates
+    // First check if toggle already exists
     if (document.querySelector('.ai-filter-toggle')) {
         return;
     }
@@ -337,38 +332,50 @@ function createHeaderToggle() {
             // Update the toggle handler in createHeaderToggle function
             input.addEventListener('change', function() {
                 isFilterEnabled = this.checked;
-                chrome.storage.local.set({ aiFilterEnabled: isFilterEnabled }, () => {
-                    // Notify other parts of the extension about the state change
-                    chrome.runtime.sendMessage({
-                        action: 'toggleFilter',
-                        enabled: isFilterEnabled
+                
+                // Safe storage access
+                if (chrome?.storage?.local) {
+                    chrome.storage.local.set({ aiFilterEnabled: isFilterEnabled }, () => {
+                        if (chrome.runtime?.sendMessage) {
+                            chrome.runtime.sendMessage({
+                                action: 'toggleFilter',
+                                enabled: isFilterEnabled
+                            });
+                        }
+                        
+                        updateFilterState(isFilterEnabled);
                     });
-                    
-                    if (isFilterEnabled) {
-                        // Remove all data-ai-scanned attributes to force rescan
-                        document.querySelectorAll('.feed-shared-update-v2').forEach(post => {
-                            post.removeAttribute('data-ai-scanned');
-                            processedPosts.delete(post);
-                        });
-                        // Run the scan
-                        hideAIPosts();
-                    } else {
-                        // Remove overlays from all posts
-                        document.querySelectorAll('.ai-content-overlay').forEach(overlay => {
-                            overlay.remove();
-                        });
-                    }
-                });
-            });
-
-            // Set initial state from storage with improved sync
-            chrome.storage.local.get(['aiFilterEnabled'], function(result) {
-                isFilterEnabled = result.aiFilterEnabled || false;
-                input.checked = isFilterEnabled;
-                if (isFilterEnabled) {
-                    hideAIPosts();
+                } else {
+                    // Fallback if storage is not available
+                    updateFilterState(isFilterEnabled);
                 }
             });
+
+            // Safe initial state loading
+            if (chrome?.storage?.local) {
+                chrome.storage.local.get(['aiFilterEnabled'], function(result) {
+                    isFilterEnabled = result.aiFilterEnabled || false;
+                    input.checked = isFilterEnabled;
+                    if (isFilterEnabled) {
+                        hideAIPosts();
+                    }
+                });
+            }
+
+            // Helper function to update filter state
+            function updateFilterState(enabled) {
+                if (enabled) {
+                    document.querySelectorAll('.feed-shared-update-v2').forEach(post => {
+                        post.removeAttribute('data-ai-scanned');
+                        processedPosts.delete(post);
+                    });
+                    hideAIPosts();
+                } else {
+                    document.querySelectorAll('.ai-content-overlay').forEach(overlay => {
+                        overlay.remove();
+                    });
+                }
+            }
 
             // Insert before search if not already present
             if (!document.querySelector('#ai-filter-container')) {
@@ -379,6 +386,41 @@ function createHeaderToggle() {
 }
 
 // Update initialization to prevent multiple instances
+// Add this function before initialize()
+function setupPostObserver() {
+    const observer = new MutationObserver((mutations) => {
+        if (!isFilterEnabled) return;
+        
+        for (const mutation of mutations) {
+            mutation.addedNodes.forEach(node => {
+                if (node.matches?.(POST_SELECTOR)) {
+                    postObserver.observe(node);
+                    scanPost(node);
+                }
+            });
+        }
+    });
+
+    document.querySelectorAll(FEED_SELECTOR).forEach(feed => {
+        if (feed) {
+            observer.observe(feed, {
+                childList: true,
+                subtree: true
+            });
+        }
+    });
+
+    // Store observer reference for cleanup
+    window._aiFilterObserver = observer;
+}
+
+function hideAIPosts() {
+    document.querySelectorAll(POST_SELECTOR).forEach(post => {
+        postObserver.observe(post);
+        scanPost(post);
+    });
+}
+
 function initialize() {
     // Remove any existing observers before setting up new ones
     if (window._aiFilterObserver) {
