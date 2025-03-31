@@ -2,7 +2,7 @@ let isFilterEnabled = false;
 
 // Function to check if text contains AI-related keywords
 // Pre-compile the regex pattern once
-const AI_PATTERN = /(AI|A\.I\.|artificial intelligence|machine learning|deep learning|neural network|GPT-[34]|ChatGPT|LLM)s?\b/i;
+
 
 function containsAIKeywords(text) {
     if (!text) return { matched: false };
@@ -10,63 +10,94 @@ function containsAIKeywords(text) {
     return match ? { matched: true, pattern: match[0] } : { matched: false };
 }
 
+// Pre-compile all regex and selectors for better performance
+// Pre-compile all patterns and cache DOM queries
+const AI_PATTERN = /(AI|A\.I\.|artificial intelligence|machine learning|deep learning|neural network|GPT-[34]|ChatGPT|LLM)s?\b/i;
+const POST_SELECTOR = '.feed-shared-update-v2:not([data-ai-scanned])';
+const FEED_SELECTOR = '.core-rail, .feed-following-feed';
+
+// Cache for processed posts to avoid reprocessing
+const processedPosts = new WeakSet();
+
 function hideAIPosts() {
-    // Use more efficient selector and process in larger chunks
-    const posts = document.querySelectorAll('.feed-shared-update-v2:not([data-ai-scanned])');
+    // Use performance-optimized selector
+    const posts = document.querySelectorAll(POST_SELECTOR);
     if (!posts.length) return;
 
-    const processChunk = (startIndex) => {
-        const chunk = Array.from(posts).slice(startIndex, startIndex + 20); // Increased chunk size
-        if (!chunk.length) return;
+    // Process in micro-batches for better performance
+    let index = 0;
+    const batchSize = 5;
 
-        for (const post of chunk) {
+    function processBatch() {
+        const end = Math.min(index + batchSize, posts.length);
+        const fragment = document.createDocumentFragment();
+
+        while (index < end) {
+            const post = posts[index++];
+            if (processedPosts.has(post)) continue;
+
+            processedPosts.add(post);
             post.setAttribute('data-ai-scanned', 'true');
-            const text = post.textContent; // Get all text content at once
-            const result = containsAIKeywords(text);
-            if (result.matched) handleMatchedPost(post, result);
+
+            // Quick text scan - only check visible content
+            const textContent = post.querySelector('.feed-shared-update-v2__description')?.textContent || '';
+            if (AI_PATTERN.test(textContent)) {
+                handleMatchedPost(post);
+            }
         }
 
-        if (startIndex + 20 < posts.length) {
-            requestAnimationFrame(() => processChunk(startIndex + 20)); // Use RAF instead of requestIdleCallback
+        if (index < posts.length) {
+            // Process next batch in next animation frame
+            requestAnimationFrame(processBatch);
         }
-    };
+    }
 
-    requestAnimationFrame(() => processChunk(0));
+    // Start processing immediately
+    processBatch();
 }
 
 function setupPostObserver() {
-    const feedObserver = new MutationObserver((mutations) => {
+    // Use single observer for better performance
+    const observer = new MutationObserver((mutations) => {
         if (!isFilterEnabled) return;
         
-        // Quick check for relevant mutations
-        if (mutations.some(m => m.addedNodes.length > 0)) {
-            if (window._aiFilterTimeout) cancelAnimationFrame(window._aiFilterTimeout);
-            window._aiFilterTimeout = requestAnimationFrame(hideAIPosts);
+        // Quick check for new content
+        for (const mutation of mutations) {
+            if (mutation.addedNodes.length) {
+                requestAnimationFrame(hideAIPosts);
+                break;
+            }
         }
     });
 
-    const observeTarget = document.querySelector('.core-rail') || document.querySelector('.feed-following-feed');
-    if (observeTarget) {
-        feedObserver.observe(observeTarget, {
-            childList: true,
-            subtree: true,
-            attributes: false // Removed unnecessary attribute observation
+    // Observe both possible feed containers
+    document.querySelectorAll(FEED_SELECTOR).forEach(feed => {
+        if (feed) {
+            observer.observe(feed, {
+                childList: true,
+                subtree: true
+            });
+        }
+    });
+}
+
+// Initialize immediately without waiting
+function initialize() {
+    if (document.readyState !== 'loading') {
+        setupPostObserver();
+        createHeaderToggle();
+        if (isFilterEnabled) hideAIPosts();
+    } else {
+        document.addEventListener('DOMContentLoaded', () => {
+            setupPostObserver();
+            createHeaderToggle();
+            if (isFilterEnabled) hideAIPosts();
         });
     }
 }
 
-// Add a more efficient initialization
-function initialize() {
-    setupPostObserver();
-    createHeaderToggle();
-    
-    // Initial scan with slight delay to ensure DOM is ready
-    if (document.readyState === 'complete') {
-        hideAIPosts();
-    } else {
-        window.addEventListener('load', hideAIPosts);
-    }
-}
+// Remove scroll listener and debounce
+initialize();
 
 // Separate function to handle matched posts
 function handleMatchedPost(post, result) {
@@ -180,6 +211,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 function createHeaderToggle() {
+    // First check if toggle already exists to prevent duplicates
+    if (document.querySelector('.ai-filter-toggle')) {
+        return;
+    }
+
     const waitForNav = setInterval(() => {
         const navSearch = document.querySelector('.global-nav__search');
         if (navSearch) {
@@ -187,6 +223,7 @@ function createHeaderToggle() {
             
             // Create toggle container
             const toggleContainer = document.createElement('div');
+            toggleContainer.id = 'ai-filter-container'; // Add unique ID
             toggleContainer.style.cssText = `
                 display: flex;
                 align-items: center;
@@ -272,23 +309,35 @@ function createHeaderToggle() {
             `;
             document.head.appendChild(style);
 
-            // Update the click handling
+            // Update the click handling with improved state management
+            // Update the toggle handler in createHeaderToggle function
             input.addEventListener('change', function() {
                 isFilterEnabled = this.checked;
-                chrome.storage.local.set({ aiFilterEnabled: isFilterEnabled });
-                if (isFilterEnabled) {
-                    hideAIPosts();
-                } else {
-                    document.querySelectorAll('.feed-shared-update-v2').forEach(post => {
-                        post.style.border = '';
-                        post.style.backgroundColor = '';
-                        const debugLabel = post.querySelector('.ai-filter-debug');
-                        if (debugLabel) debugLabel.remove();
+                chrome.storage.local.set({ aiFilterEnabled: isFilterEnabled }, () => {
+                    // Notify other parts of the extension about the state change
+                    chrome.runtime.sendMessage({
+                        action: 'toggleFilter',
+                        enabled: isFilterEnabled
                     });
-                }
+                    
+                    if (isFilterEnabled) {
+                        // Remove all data-ai-scanned attributes to force rescan
+                        document.querySelectorAll('.feed-shared-update-v2').forEach(post => {
+                            post.removeAttribute('data-ai-scanned');
+                            processedPosts.delete(post);
+                        });
+                        // Run the scan
+                        hideAIPosts();
+                    } else {
+                        // Remove overlays from all posts
+                        document.querySelectorAll('.ai-content-overlay').forEach(overlay => {
+                            overlay.remove();
+                        });
+                    }
+                });
             });
 
-            // Set initial state from storage
+            // Set initial state from storage with improved sync
             chrome.storage.local.get(['aiFilterEnabled'], function(result) {
                 isFilterEnabled = result.aiFilterEnabled || false;
                 input.checked = isFilterEnabled;
@@ -297,21 +346,24 @@ function createHeaderToggle() {
                 }
             });
 
-            // Insert before search
-            navSearch.parentNode.insertBefore(toggleContainer, navSearch);
+            // Insert before search if not already present
+            if (!document.querySelector('#ai-filter-container')) {
+                navSearch.parentNode.insertBefore(toggleContainer, navSearch);
+            }
         }
     }, 1000);
 }
 
-// Update initialization
+// Update initialization to prevent multiple instances
 function initialize() {
-    // Set up observers first
-    setupPostObserver();
+    // Remove any existing observers before setting up new ones
+    if (window._aiFilterObserver) {
+        window._aiFilterObserver.disconnect();
+    }
     
-    // Then create the header toggle
+    setupPostObserver();
     createHeaderToggle();
     
-    // Initial scan of posts
     if (isFilterEnabled) {
         hideAIPosts();
     }
