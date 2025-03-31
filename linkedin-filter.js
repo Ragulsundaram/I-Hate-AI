@@ -12,9 +12,6 @@ const VIEWPORT_THRESHOLD = 500; // Reduced for better performance
 const processedPosts = new WeakSet();
 const overlayCache = new WeakMap();
 
-// Simple pattern from original code that successfully detected casual AI mentions
-const SIMPLE_AI_PATTERN = /(AI|A\.I\.|artificial intelligence|machine learning|deep learning|neural network|GPT-[34]|ChatGPT|LLM|SLM|Presidio|Azure AI|AI Bootcamp|Human-AI|HAI)s?\b/i;
-
 // Skip phrases - now a Set for O(1) lookups
 const SKIP_PHRASES = new Set([
   'air', 'aim', 'aid', 'aisle', 'airing', 'aint', 'paid',
@@ -31,8 +28,8 @@ const AMBIGUOUS_TERMS = new Map([
   ['bard', /\b(?:google|ai|assistant|chatbot|language|model)\b/i]
 ]);
 
-// Compile all AI filters into a single RegExp using alternation for better performance
-const COMPREHENSIVE_AI_PATTERN = new RegExp([
+// Definitive AI terms that are always reliable indicators
+const DEFINITIVE_AI_TERMS = [
   /\bartificial intelligence\b/i,
   /\bmachine learning\b/i,
   /\bdeep learning\b/i,
@@ -54,27 +51,12 @@ const COMPREHENSIVE_AI_PATTERN = new RegExp([
   /\bAnthropic\b/i,
   /\bDeepMind\b/i,
   /\bClaude\b/i,
-  /\bBard\b/i,
   /\bGemini\b/i,
-  /\bSora\b/i,
-  /\bMidjourney\b/i,
-  /\bDALL[\\-\\s]?E\b/i,
-  /\bStable Diffusion\b/i,
   /\bLlama[\s-]?2\b/i,
-  /\bPaLM\b/i,
-  /\b(?:Facebook's|FB's|Zuckerberg's)?\s*Meta\s+AI\b/i,
-  /\bMeta's\s+AI\b/i,
-  /\bMeta\s+(?:Llama|AI\s+research|AI\s+lab|AI\s+team)\b/i,
   /\bCopilot\b/i,
-  /\bAuto-?GPT\b/i,
-  /\bBabyAGI\b/i,
-  /\bAgentGPT\b/i,
-  /\bLangChain\b/i,
-  /\bHugging\s?Face\b/i,
   /\bTensorFlow\b/i,
   /\bPyTorch\b/i,
   /\bKeras\b/i,
-  /\bscikit-learn\b/i,
   /\bAzure AI\b/i,
   /\bAWS AI\b/i,
   /\bIBM Watson\b/i,
@@ -82,41 +64,41 @@ const COMPREHENSIVE_AI_PATTERN = new RegExp([
   /\bvoice assistant(s)?\b/i,
   /\bimage recognition\b/i,
   /\brecommendation engine(s)?\b/i,
-  /\bsemantic search\b/i,
-  /\bknowledge graph(s)?\b/i,
   /\bprompt engineering\b/i,
-  /\bAI ethics\b/i,
-  /\bAI safety\b/i,
-  /\bAI bias\b/i,
-  /\bSingularity\b/i,
-  /\bAGI\b/i,
   /\bfoundation models\b/i,
-  /\bAI (?:in|for) (business|marketing|development|innovation|research|healthcare|finance|education|etc)\b/i,
-  /\bAI[-\s]?(powered|driven|enabled|based|revolution|systems?)\b/i,
-  /\b(powered|driven|enabled|based|revolution|systems?)[\s-]?AI\b/i,
-  /\bAI\s+(app|tool|model|system|solution)\b/i,
-  /\bAI\s+revolution\b/i,
-  /\b(revolutionizing|revolutionized by)\s+AI\b/i,
-  /\bdisruptive AI\b/i,
-  /\bAI\s+game[-\s]?changer\b/i,
-  /\btransformative AI\b/i,
-  /\bharnessing AI\b/i,
-  /\bthe future of AI\b/i,
-  /\bAI is taking over\b/i,
-  /\b(age of|era of) AI\b/i,
-  /\bsuperintelligence\b/i,
-  /\b(just built|just launched|created|built with|launched my) an? AI (app|tool|model|system|solution)\b/i,
-  /\bexcited to (share|announce) my new AI (app|tool|model|system|solution)\b/i,
-  /\bmy take on (the|how|why|what|impact|benefits|challenges) .*AI\b/i,
-  /\bthe power of AI (to|in|for) (business|marketing|development|innovation|research|healthcare|finance|education|etc)\b/i,
-  // Add casual AI mention patterns
-  /\buse AI\b/i,
-  /\busing AI\b/i,
-  /\bgenerate with AI\b/i,
-  /\bgenerated using AI\b/i,
+];
+
+// Combine definitive terms into a single regex for performance
+const DEFINITIVE_AI_PATTERN = new RegExp(
+  DEFINITIVE_AI_TERMS.map(regex => regex.source).join('|'), 
+  'i'
+);
+
+// Context patterns that strongly indicate AI discussion
+const AI_CONTEXT_PATTERNS = [
+  /\b(using|use|with|powered|driven|based|generated|model|system|tool|technology)\s+(by|with)?\s*AI\b/i,
+  /\bAI\s+(model|tool|system|technology|solution|application|generation|content|image|text|assistant|chatbot|algorithm)\b/i,
+  /\b(the|an|this|our|their|my|your)\s+AI\b/i,
+  /\bAI\s+(is|are|was|were|will|can|could|should|would)\b/i,
+  /\bAI-powered\b/i,
   /\bAI-generated\b/i,
-  /\bAI to generate\b/i
-].map(regex => regex.source).join('|'), 'i');
+  /\bAI-driven\b/i,
+  /\bAI-based\b/i,
+  /\bAI-enabled\b/i
+];
+
+// Combine context patterns into a single regex for performance
+const AI_CONTEXT_PATTERN = new RegExp(
+  AI_CONTEXT_PATTERNS.map(regex => regex.source).join('|'), 
+  'i'
+);
+
+// Suspect patterns that indicate non-AI usage of 'ai' letters
+const SUSPECT_PATTERNS = [
+  /\b\w{1,2}ai\w{1,4}\b/i, // Words with 'ai' in the middle (like 'kaise', 'bhai')
+  /\b\w{0,2}ai\b/i,        // Very short words ending in 'ai'
+  /\bai\w{1,3}\b/i         // Very short words starting with 'ai'
+];
 
 // Create a template for overlay once and clone it for better performance
 let overlayTemplate = null;
@@ -151,62 +133,109 @@ const postObserver = new IntersectionObserver(
 );
 
 /**
- * The original simple check for AI content that worked well
- * for detecting casual mentions of AI
+ * Smart AI detection that distinguishes between genuine AI references
+ * and incidental occurrences of the letters 'ai' in other contexts
  */
-function simpleCasualAICheck(text) {
-  if (!text) return false;
+function smartAIDetection(text) {
+  if (!text) return { matched: false };
   
-  // Check for simple AI mention using the original pattern
-  return SIMPLE_AI_PATTERN.test(text);
+  // 1. Check for definitive AI terms first (these are unambiguous)
+  if (DEFINITIVE_AI_PATTERN.test(text)) {
+    return { matched: true, confidence: "high" };
+  }
+  
+  // 2. Check for standalone "AI" with strong word boundaries
+  const aiMatches = text.match(/\b(AI|A\.I\.)\b/gi);
+  
+  if (!aiMatches) return { matched: false };
+  
+  // Count total occurrences of standalone AI
+  const totalAIMatches = aiMatches.length;
+  
+  // 3. Apply contextual analysis for "AI" matches
+  // Check for surrounding context that supports AI interpretation
+  let validContextMatches = 0;
+  if (AI_CONTEXT_PATTERN.test(text)) {
+    validContextMatches++;
+  }
+  
+  // 4. Detect suspect word patterns that indicate non-English words
+  let suspectMatchCount = 0;
+  for (const pattern of SUSPECT_PATTERNS) {
+    const matches = text.match(pattern) || [];
+    
+    // Filter out actual AI matches from suspect matches
+    const filteredMatches = matches.filter(match => {
+      const lowerMatch = match.toLowerCase();
+      return !(/\bai\b/i.test(lowerMatch)); // Exclude standalone "AI"
+    });
+    
+    suspectMatchCount += filteredMatches.length;
+  }
+  
+  // 5. Apply confidence scoring
+  if (validContextMatches > 0) {
+    // Clear context with explicit AI reference
+    return { matched: true, confidence: "high" };
+  } else if (totalAIMatches > 0 && suspectMatchCount === 0) {
+    // Standalone AI with no suspect patterns
+    return { matched: true, confidence: "medium" };
+  } else if (suspectMatchCount > totalAIMatches * 2) {
+    // Many more suspect words than AI references - likely false positive
+    return { matched: false };
+  } else if (totalAIMatches > 0) {
+    // Some AI mentions but also suspect patterns - low confidence
+    return { matched: true, confidence: "low" };
+  }
+  
+  // Default to no match if no clear indicators
+  return { matched: false };
 }
 
 /**
- * Advanced containsAIKeywords with optimized lookup strategy:
- * 1. First do a quick check with simple pattern (like original code)
- * 2. If that passes, handle skip phrases and false positives
- * 3. For ambiguous matches, verify with context checking
+ * Main AI keyword detection function that combines smart detection
+ * with comprehensive pattern matching
  */
 function containsAIKeywords(text) {
   if (!text) return { matched: false };
   
   const lowerText = text.toLowerCase();
   
-  // First check using simple pattern from original code
-  if (simpleCasualAICheck(text)) {
-    // If we have a match, check for skip phrases
-    for (const phrase of SKIP_PHRASES) {
-      if (lowerText.includes(phrase) && 
-          !lowerText.includes(' ai ') && 
-          !lowerText.includes('artificial intelligence') &&
-          !lowerText.match(/\bai\b/i)) {
-        return { matched: false };
-      }
+  // Skip common false positive phrases
+  for (const phrase of SKIP_PHRASES) {
+    if (lowerText.includes(phrase) && 
+        !lowerText.includes(' ai ') && 
+        !lowerText.match(/\bai\b/i)) {
+      // Skip if it's a common false positive and doesn't contain standalone AI
+      return { matched: false };
+    }
+  }
+  
+  // First check with definitive pattern (for performance)
+  const definitiveMatch = DEFINITIVE_AI_PATTERN.exec(text);
+  if (definitiveMatch) {
+    return { matched: true, pattern: definitiveMatch[0], confidence: "high" };
+  }
+  
+  // Then do smart analysis for standalone "AI" mentions
+  const aiResult = smartAIDetection(text);
+  
+  if (aiResult.matched) {
+    // Only match if confidence is medium or high
+    if (aiResult.confidence === "high" || aiResult.confidence === "medium") {
+      return { matched: true, pattern: "AI", confidence: aiResult.confidence };
     }
     
-    // Check for basic AI mention first
-    const simpleMatch = SIMPLE_AI_PATTERN.exec(text);
-    if (simpleMatch) {
-      // Check ambiguous terms context if needed
-      const matchedText = simpleMatch[0].toLowerCase();
+    // For low confidence matches, additional verification
+    if (aiResult.confidence === "low") {
+      // Check for ambiguous terms context if needed
       for (const [term, contextPattern] of AMBIGUOUS_TERMS.entries()) {
-        if (matchedText.includes(term) && !contextPattern.test(lowerText)) {
-          // Try comprehensive pattern as a fallback
-          const comprehensiveMatch = COMPREHENSIVE_AI_PATTERN.exec(text);
-          return comprehensiveMatch ? 
-            { matched: true, pattern: comprehensiveMatch[0] } : 
-            { matched: false };
+        if (lowerText.includes(term) && !contextPattern.test(lowerText)) {
+          return { matched: false };
         }
       }
-      
-      return { matched: true, pattern: simpleMatch[0] };
+      return { matched: true, pattern: "AI", confidence: "low" };
     }
-    
-    // If simple check failed, try comprehensive pattern
-    const comprehensiveMatch = COMPREHENSIVE_AI_PATTERN.exec(text);
-    return comprehensiveMatch ? 
-      { matched: true, pattern: comprehensiveMatch[0] } : 
-      { matched: false };
   }
   
   return { matched: false };
@@ -243,15 +272,16 @@ function scanPost(post) {
   if (!textContent) return;
   
   // Use the optimized AI detection
-  if (containsAIKeywords(textContent).matched) {
-    handleMatchedPost(post);
+  const result = containsAIKeywords(textContent);
+  if (result.matched) {
+    handleMatchedPost(post, result.confidence || "medium");
   }
 }
 
 /**
  * Get overlay from cache or create a new one using template cloning
  */
-function handleMatchedPost(post) {
+function handleMatchedPost(post, confidence) {
   // Check cache first
   let overlayContainer = overlayCache.get(post);
   
@@ -296,6 +326,7 @@ function handleMatchedPost(post) {
       
       const message = document.createElement('div');
       message.textContent = 'AI Content Detected';
+      message.className = 'ai-message';
       message.style.cssText = `
         color: #E7E9EA;
         font-size: 16px;
@@ -328,11 +359,17 @@ function handleMatchedPost(post) {
     // Clone the template instead of creating new elements
     overlayContainer = overlayTemplate.cloneNode(true);
     
+    // Update message based on confidence
+    const messageEl = overlayContainer.querySelector('.ai-message');
+    if (confidence === "low") {
+      messageEl.textContent = 'Possible AI Content';
+    }
+    
     // Update colors based on theme if needed
     if (!isDarkMode) {
       overlayContainer.style.backgroundColor = 'rgba(240, 240, 240, 0.75)';
       overlayContainer.querySelector('span').style.color = '#666';
-      overlayContainer.querySelector('div').style.color = '#666';
+      overlayContainer.querySelector('.ai-message').style.color = '#666';
       
       const showButton = overlayContainer.querySelector('.ai-show-button');
       showButton.style.borderColor = '#0a66c2';
