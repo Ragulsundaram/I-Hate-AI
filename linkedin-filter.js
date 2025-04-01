@@ -448,6 +448,7 @@ function createHeaderToggle() {
         toggleContainer.style.cssText = `
           display: flex;
           align-items: center;
+          justify-content: center;
           margin-right: 16px;
           padding: 0 12px;
           height: 100%;
@@ -458,7 +459,8 @@ function createHeaderToggle() {
         toggle.className = 'ai-filter-toggle';
         toggle.style.cssText = `
           position: relative;
-          display: inline-block;
+          display: flex;
+          align-items: center;
           width: 40px;
           height: 20px;
           margin-left: 8px;
@@ -510,6 +512,11 @@ function createHeaderToggle() {
           font-size: 14px;
           margin-right: 8px;
           font-weight: 800;
+          white-space: nowrap;
+          display: flex;
+          align-items: center;
+          height: 20px;
+          line-height: 20px;
         `;
         
         // Assemble toggle
