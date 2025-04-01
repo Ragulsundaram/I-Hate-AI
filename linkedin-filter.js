@@ -504,12 +504,12 @@ function createHeaderToggle() {
         
         // Create label text
         const label = document.createElement('span');
-        label.textContent = 'Hide AI';
+        label.textContent = 'I Hate AI';
         label.style.cssText = `
           color: #A4A5A7;
           font-size: 14px;
           margin-right: 8px;
-          font-weight: 600;
+          font-weight: 800;
         `;
         
         // Assemble toggle
