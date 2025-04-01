@@ -16,7 +16,7 @@ const HINDI_FALSE_POSITIVES = new Set([
   'nahi', 'jaise', 'waisa', 'saiyaan', 'ghai', 'chai'
 ]);
 
-// AI pattern list (directly using your refinedAiFilters)
+// AI pattern list
 const AI_PATTERNS = [
     /\bartificial intelligence\b/i,
     /\bmachine learning\b/i,
@@ -201,6 +201,7 @@ function scanPost(post) {
  * Handle a post that contains AI content
  */
 function handleMatchedPost(post) {
+  // Check if we already have an overlay for this post
   let overlayContainer = overlayCache.get(post);
   
   if (!overlayContainer) {
@@ -208,30 +209,79 @@ function handleMatchedPost(post) {
       const isDarkMode = document.documentElement.classList.contains('theme--dark') || 
                          document.body.classList.contains('theme--dark');
       
-      overlayContainer = document.createElement('div');
-      overlayContainer.className = 'ai-content-overlay';
-      overlayContainer.style.cssText = `
-        background-color: ${isDarkMode ? 'rgba(0, 0, 0, 0.75)' : 'rgba(240, 240, 240, 0.75)'};
-        padding: 20px;
-        text-align: center;
-        border-radius: 8px;
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        z-index: 51;
-        backdrop-filter: blur(4px);
-        -webkit-backdrop-filter: blur(4px);
-        min-height: 200px;
-        height: 100%;
-      `;
+      // STEP 1: Find the content portion to cover
+      // Look for the caption element with the specific class
+      const captionElement = post.querySelector('.lWcOorZdsBUnyCPoSYDMFPiRbASVlQcyD') || 
+                             post.querySelector('.feed-shared-update-v2__description') ||
+                             post.querySelector('.update-components-text');
       
+      // If no caption found, fall back to covering the whole post
+      if (!captionElement) {
+        // Create overlay for whole post as fallback
+        overlayContainer = document.createElement('div');
+        overlayContainer.className = 'ai-content-overlay';
+        overlayContainer.style.cssText = `
+          background-color: ${isDarkMode ? 'rgba(0, 0, 0, 0.75)' : 'rgba(240, 240, 240, 0.75)'};
+          padding: 20px;
+          text-align: center;
+          border-radius: 8px;
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          z-index: 51;
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+          min-height: 200px;
+          height: 100%;
+        `;
+        
+        post.style.position = 'relative';
+        post.appendChild(overlayContainer);
+      } else {
+        // STEP 2: Create a content overlay that only covers from caption down
+        // First, get the position of the caption element relative to the post
+        const postRect = post.getBoundingClientRect();
+        const captionRect = captionElement.getBoundingClientRect();
+        
+        // Calculate the top position relative to the post
+        const topOffset = captionRect.top - postRect.top;
+        
+        // Create overlay that starts from caption
+        overlayContainer = document.createElement('div');
+        overlayContainer.className = 'ai-content-overlay';
+        overlayContainer.style.cssText = `
+          background-color: ${isDarkMode ? 'rgba(0, 0, 0, 0.75)' : 'rgba(240, 240, 240, 0.75)'};
+          padding: 20px;
+          text-align: center;
+          border-radius: 8px;
+          position: absolute;
+          top: ${topOffset}px;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          z-index: 51;
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+          min-height: 120px;
+        `;
+        
+        post.style.position = 'relative';
+        post.appendChild(overlayContainer);
+      }
+      
+      // STEP 3: Add the warning and button elements
       const icon = document.createElement('span');
       icon.innerHTML = '&#128683;';
       icon.style.cssText = `
@@ -283,10 +333,7 @@ function handleMatchedPost(post) {
       overlayContainer.appendChild(message);
       overlayContainer.appendChild(showButton);
       
-      // Ensure post has position relative
-      post.style.position = 'relative';
-      post.appendChild(overlayContainer);
-      
+      // Store overlay in cache
       overlayCache.set(post, overlayContainer);
     } catch (error) {
       console.error("Error creating overlay:", error);
@@ -588,15 +635,35 @@ if (document.readyState === 'loading') {
 // Add a scroll event listener to handle lazy-loaded content
 window.addEventListener('scroll', scrollHandler, { passive: true });
 
-// Simple debounce function
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
+// Helper function for more dynamic content recognition
+function setupElementObserver() {
+  // This ensures we catch dynamic class changes in LinkedIn
+  const classObserver = new MutationObserver((mutations) => {
+    if (!isFilterEnabled) return;
+    
+    mutations.forEach(mutation => {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+        // If we see a new caption element, check if its post needs processing
+        if (mutation.target.classList.contains('lWcOorZdsBUnyCPoSYDMFPiRbASVlQcyD')) {
+          const post = mutation.target.closest('.feed-shared-update-v2');
+          if (post && !post.hasAttribute('data-ai-scanned')) {
+            scanPost(post);
+          }
+        }
+      }
+    });
+  });
+  
+  // Observe the whole document for class changes
+  classObserver.observe(document.body, {
+    attributes: true,
+    attributeFilter: ['class'],
+    subtree: true
+  });
+  
+  // Store for cleanup
+  window._aiClassObserver = classObserver;
 }
+
+// Call this during initialization
+document.addEventListener('DOMContentLoaded', setupElementObserver);
