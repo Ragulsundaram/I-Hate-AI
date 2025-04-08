@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function updateStatus(enabled) {
         statusText.textContent = enabled ? 
-            "I Hate AI is active" : 
-            "I Hate AI is inactive";
+            "Mute AI is active" : 
+            "Mute AI is inactive";
     }
 });

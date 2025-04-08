@@ -505,18 +505,19 @@ function createHeaderToggle() {
         slider.appendChild(sliderButton);
         
         // Create label text
+        // In createHeaderToggle function
         const label = document.createElement('span');
-        label.textContent = 'I Hate AI';
+        label.textContent = 'Mute AI';
         label.style.cssText = `
-          color: #A4A5A7;
-          font-size: 14px;
-          margin-right: 8px;
-          font-weight: 800;
-          white-space: nowrap;
-          display: flex;
-          align-items: center;
-          height: 20px;
-          line-height: 20px;
+        color: #A4A5A7;
+        font-size: 14px;
+        margin-right: 8px;
+        font-weight: 800;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        height: 20px;
+        line-height: 20px;
         `;
         
         // Assemble toggle
