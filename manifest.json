@@ -2,7 +2,9 @@
   "manifest_version": 3,
   "name": "Mute AI",
   "version": "1.0",
-  "description": "Hide AI-related posts on LinkedIn",
+  "author": "Ragul Sundaram",
+  "minimum_chrome_version": "88",
+  "description": "Filter AI-related content from your LinkedIn feed for a cleaner, more focused browsing experience",
   "permissions": ["activeTab", "storage"],
   "host_permissions": ["*://www.linkedin.com/*"],
   "action": {

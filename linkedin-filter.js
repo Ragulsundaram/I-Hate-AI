@@ -161,35 +161,26 @@ function containsAIContent(text) {
 function scanPost(post) {
   if (!post || processedPosts.has(post)) return;
   
-  // Mark as processed immediately
   processedPosts.add(post);
   post.setAttribute('data-ai-scanned', 'true');
   
   try {
-    // Extract text content from all relevant elements
-    const textElements = [
-      post.querySelector('.feed-shared-update-v2__description'),
-      post.querySelector('.article-content'),
-      post.querySelector('.feed-shared-text'),
-      post.querySelector('.update-components-text'),
-      post.querySelector('.feed-shared-update-v2__commentary'),
-      post.querySelector('.feed-shared-inline-show-more-text'),
-      post.querySelector('.feed-shared-text__text-view')
-    ];
+    const selector = [
+      '.feed-shared-update-v2__description',
+      '.article-content',
+      '.feed-shared-text',
+      '.update-components-text',
+      '.feed-shared-update-v2__commentary',
+      '.feed-shared-inline-show-more-text',
+      '.feed-shared-text__text-view'
+    ].join(',');
     
-    // Join non-null text contents
-    const textContent = textElements.reduce((acc, el) => {
-      if (el && el.textContent) {
-        acc.push(el.textContent);
-      }
-      return acc;
-    }, []).join(' ');
+    const textContent = Array.from(post.querySelectorAll(selector))
+      .map(el => el?.textContent || '')
+      .join(' ')
+      .trim();
     
-    // Skip empty content
-    if (!textContent) return;
-    
-    // Check for AI content
-    if (containsAIContent(textContent)) {
+    if (textContent && containsAIContent(textContent)) {
       handleMatchedPost(post);
     }
   } catch (error) {
@@ -346,26 +337,29 @@ function handleMatchedPost(post) {
 /**
  * Handle scroll events to detect new posts
  */
+// Add at the top with other constants
+const SCROLL_DEBOUNCE_TIME = 150;
+
 function scrollHandler() {
   if (scrollTimeout || !isFilterEnabled) return;
   
   scrollTimeout = setTimeout(() => {
     try {
-      const unscannedPosts = document.querySelectorAll(POST_SELECTOR);
-      if (unscannedPosts.length) {
-        unscannedPosts.forEach(post => {
+      const viewportPosts = Array.from(document.querySelectorAll(POST_SELECTOR))
+        .filter(post => {
           const rect = post.getBoundingClientRect();
-          if (rect.top < window.innerHeight + VIEWPORT_THRESHOLD) {
-            postObserver.observe(post);
-            scanPost(post);
-          }
+          return rect.top < window.innerHeight + VIEWPORT_THRESHOLD;
         });
-      }
+        
+      viewportPosts.forEach(post => {
+        postObserver.observe(post);
+        scanPost(post);
+      });
     } catch (error) {
       console.error("Error in scroll handler:", error);
     }
     scrollTimeout = null;
-  }, 100);
+  }, SCROLL_DEBOUNCE_TIME);
 }
 
 /**

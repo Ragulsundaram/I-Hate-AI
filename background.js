@@ -28,12 +28,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Listen for installation events
 chrome.runtime.onInstalled.addListener((details) => {
-  console.log('Extension installed or updated:', details.reason);
+  const currentVersion = chrome.runtime.getManifest().version;
+  const previousVersion = details.previousVersion;
   
-  // Set default state if first install
   if (details.reason === 'install') {
-    console.log('Setting default filter state to inactive');
     chrome.storage.local.set({ aiFilterEnabled: false });
+  } else if (details.reason === 'update') {
+    // Handle version updates if needed
+    console.log(`Updated from ${previousVersion} to ${currentVersion}`);
   }
 });
 
